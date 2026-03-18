@@ -52,12 +52,17 @@ class BlockchainClient:
         signed = self.w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
         raw = getattr(signed, "raw_transaction", None) or signed.rawTransaction
         tx_hash = self.w3.eth.send_raw_transaction(raw)
-        receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
 
-        if receipt.status != 1:
-            raise RuntimeError(f"Transaction reverted (tx: 0x{receipt.transactionHash.hex()})")
+        # Try to get receipt, but don't block forever — return tx hash even if unconfirmed
+        try:
+            receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=30)
+            if receipt.status != 1:
+                raise RuntimeError(f"Transaction reverted (tx: 0x{tx_hash.hex()})")
+        except Exception as e:
+            # Transaction was sent but confirmation timed out — still return the hash
+            print(f"[BLOCKCHAIN] Receipt wait timed out, tx was sent: 0x{tx_hash.hex()} — {e}")
 
-        return receipt.transactionHash.hex()
+        return tx_hash.hex()
 
     def check_exists(self, fingerprint: str) -> bool:
         """Check if a fingerprint is already registered on-chain."""

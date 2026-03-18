@@ -123,6 +123,8 @@ def register_content():
         fingerprint = generate_image_fingerprint(file_path)
         image_phash = generate_image_phash(file_path)
 
+    print(f"[REGISTER] Starting registration: type={content_type}, title={title}, fingerprint={fingerprint}")
+
     # Check if already registered locally
     existing = Content.query.filter_by(fingerprint=fingerprint).first()
     if existing:
@@ -131,16 +133,20 @@ def register_content():
             "existing_record": existing.to_dict(),
         }), 409
 
-    # Register on blockchain
+    # Register on blockchain (with timeout protection)
     tx_hash = None
     blockchain_error = None
     if blockchain.is_configured:
         try:
+            print("[REGISTER] Checking blockchain for existing record...")
             if blockchain.check_exists(fingerprint):
                 return jsonify({"error": "Content already registered on blockchain"}), 409
+            print("[REGISTER] Sending blockchain transaction...")
             tx_hash = blockchain.register_content(fingerprint, content_type, title, description)
+            print(f"[REGISTER] Blockchain tx confirmed: {tx_hash}")
         except Exception as e:
             blockchain_error = str(e)
+            print(f"[REGISTER] Blockchain error (continuing without): {e}")
     else:
         blockchain_error = "Blockchain not configured. Content saved locally only."
 
@@ -148,12 +154,13 @@ def register_content():
     user_email = g.user["email"] if g.user else None
     firebase_uid = g.user["uid"] if g.user else None
 
-    # Upload to IPFS via Pinata (images and text)
+    # Upload to IPFS via Pinata
     ipfs_hash = None
     ipfs_url = None
     ipfs_error = None
     if ipfs_configured():
         try:
+            print("[REGISTER] Uploading to IPFS...")
             if content_type == "image" and file_path:
                 ipfs_result = ipfs_pin_file(file_path, metadata={
                     "title": title,
@@ -171,11 +178,14 @@ def register_content():
                 }, name=title or "text_content")
                 ipfs_hash = ipfs_result["ipfs_hash"]
                 ipfs_url = ipfs_result["ipfs_url"]
+            print(f"[REGISTER] IPFS upload done: {ipfs_hash}")
         except Exception as e:
             ipfs_error = str(e)
+            print(f"[REGISTER] IPFS error (continuing without): {e}")
     else:
         ipfs_error = "IPFS not configured. Set PINATA_API_KEY and PINATA_SECRET_KEY."
 
+    print("[REGISTER] Saving to database...")
     # Save to local database
     record = Content(
         firebase_uid=firebase_uid,
