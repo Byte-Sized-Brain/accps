@@ -13,14 +13,20 @@ import {
   Activity,
   Box,
   CornerDownRight,
-  Cpu
+  Cpu,
+  Search,
+  Clock,
+  User,
+  Hash,
+  ShieldCheck,
+  XCircle,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import GlassCard from "@/components/GlassCard";
 import FileDropZone from "@/components/FileDropZone";
 import HexFingerprint from "@/components/HexFingerprint";
 import ProtectedRoute from "@/components/ProtectedRoute";
-import { registerContent, RegisterResponse } from "@/lib/api";
+import { registerContent, RegisterResponse, verifyOnChain } from "@/lib/api";
 
 export default function RegisterPage() {
   const [contentType, setContentType] = useState<"text" | "image">("text");
@@ -30,6 +36,9 @@ export default function RegisterPage() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<RegisterResponse | null>(null);
+  const [verifying, setVerifying] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [verifyResult, setVerifyResult] = useState<any>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,6 +69,20 @@ export default function RegisterPage() {
       toast.error(message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleVerify = async () => {
+    if (!result?.fingerprint) return;
+    setVerifying(true);
+    setVerifyResult(null);
+    try {
+      const data = await verifyOnChain(result.fingerprint);
+      setVerifyResult(data);
+    } catch {
+      toast.error("Verification failed");
+    } finally {
+      setVerifying(false);
     }
   };
 
@@ -330,6 +353,114 @@ export default function RegisterPage() {
                         {result.ipfs_warning}
                       </p>
                     )}
+
+                    {/* Verify on Blockchain Button */}
+                    <div className="pt-4 space-y-4">
+                      <div className="h-px w-full bg-white/5" />
+                      <button
+                        onClick={handleVerify}
+                        disabled={verifying}
+                        className="w-full flex items-center justify-center gap-3 py-4 rounded-sm border border-primary/30 bg-primary/5 hover:bg-primary/10 text-primary font-black text-[12px] tracking-widest uppercase transition-all disabled:opacity-50"
+                      >
+                        {verifying ? (
+                          <>
+                            <Loader2 size={14} className="animate-spin" />
+                            Verifying...
+                          </>
+                        ) : (
+                          <>
+                            <Search size={14} />
+                            Verify on Blockchain
+                          </>
+                        )}
+                      </button>
+
+                      {/* Verification Result */}
+                      <AnimatePresence>
+                        {verifyResult && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="overflow-hidden"
+                          >
+                            <div className={`p-5 rounded-sm border space-y-4 ${
+                              verifyResult.on_chain
+                                ? "border-green-500/30 bg-green-500/5"
+                                : "border-amber-500/30 bg-amber-500/5"
+                            }`}>
+                              <div className="flex items-center gap-2">
+                                {verifyResult.on_chain ? (
+                                  <ShieldCheck size={16} className="text-green-400" />
+                                ) : (
+                                  <XCircle size={16} className="text-amber-400" />
+                                )}
+                                <span className={`text-[13px] font-black tracking-wider uppercase ${
+                                  verifyResult.on_chain ? "text-green-400" : "text-amber-400"
+                                }`}>
+                                  {verifyResult.on_chain ? "Verified On-Chain" : "Not Found On-Chain"}
+                                </span>
+                              </div>
+
+                              {verifyResult.on_chain && verifyResult.blockchain_record && (
+                                <div className="space-y-3 text-[12px] font-mono">
+                                  <div className="flex items-start gap-2">
+                                    <User size={12} className="text-zinc-500 mt-0.5 shrink-0" />
+                                    <div>
+                                      <p className="text-zinc-500 text-[11px] uppercase tracking-wider">Owner</p>
+                                      <p className="text-zinc-300 break-all">{verifyResult.blockchain_record.owner}</p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-start gap-2">
+                                    <Hash size={12} className="text-zinc-500 mt-0.5 shrink-0" />
+                                    <div>
+                                      <p className="text-zinc-500 text-[11px] uppercase tracking-wider">Content Type</p>
+                                      <p className="text-zinc-300">{verifyResult.blockchain_record.content_type}</p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-start gap-2">
+                                    <FileText size={12} className="text-zinc-500 mt-0.5 shrink-0" />
+                                    <div>
+                                      <p className="text-zinc-500 text-[11px] uppercase tracking-wider">Title</p>
+                                      <p className="text-zinc-300">{verifyResult.blockchain_record.title}</p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-start gap-2">
+                                    <Clock size={12} className="text-zinc-500 mt-0.5 shrink-0" />
+                                    <div>
+                                      <p className="text-zinc-500 text-[11px] uppercase tracking-wider">Timestamp</p>
+                                      <p className="text-zinc-300">
+                                        {new Date(verifyResult.blockchain_record.timestamp * 1000).toLocaleString()}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  {result.tx_hash && (
+                                    <a
+                                      href={`https://sepolia.etherscan.io/tx/${result.tx_hash}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex items-center justify-center gap-2 mt-3 py-3 rounded-sm bg-zinc-950 border border-white/10 hover:border-green-500/40 transition-all group"
+                                    >
+                                      <ExternalLink size={13} className="text-zinc-500 group-hover:text-green-400" />
+                                      <span className="text-[11px] font-black tracking-widest uppercase text-zinc-400 group-hover:text-white">
+                                        View on Etherscan
+                                      </span>
+                                    </a>
+                                  )}
+                                </div>
+                              )}
+
+                              {!verifyResult.on_chain && (
+                                <p className="text-[12px] text-amber-400/70">
+                                  Content was saved locally but may not have been written to the blockchain. Check your blockchain configuration.
+                                </p>
+                              )}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
                   </GlassCard>
                 </motion.div>
               ) : (

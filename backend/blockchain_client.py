@@ -28,15 +28,24 @@ class BlockchainClient:
         if not self.is_configured:
             raise RuntimeError("Blockchain client not configured. Set CONTRACT_ADDRESS, PRIVATE_KEY, and ABI.")
 
-        nonce = self.w3.eth.get_transaction_count(self.account.address)
+        nonce = self.w3.eth.get_transaction_count(self.account.address, "pending")
+
+        # Ensure a reasonable gas price (some public RPCs report very low values)
+        gas_price = max(self.w3.eth.gas_price, self.w3.to_wei(1, "gwei"))
+
+        # Estimate gas dynamically (longer strings need more gas)
+        estimated_gas = self.contract.functions.registerContent(
+            fingerprint, content_type, title, description
+        ).estimate_gas({"from": self.account.address})
+        gas_limit = int(estimated_gas * 1.3)  # 30% buffer
 
         tx = self.contract.functions.registerContent(
             fingerprint, content_type, title, description
         ).build_transaction({
             "from": self.account.address,
             "nonce": nonce,
-            "gas": 300000,
-            "gasPrice": self.w3.eth.gas_price,
+            "gas": gas_limit,
+            "gasPrice": gas_price,
             "chainId": 11155111,  # Sepolia chain ID
         })
 
@@ -44,6 +53,9 @@ class BlockchainClient:
         raw = getattr(signed, "raw_transaction", None) or signed.rawTransaction
         tx_hash = self.w3.eth.send_raw_transaction(raw)
         receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+
+        if receipt.status != 1:
+            raise RuntimeError(f"Transaction reverted (tx: 0x{receipt.transactionHash.hex()})")
 
         return receipt.transactionHash.hex()
 

@@ -33,7 +33,7 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
 
 cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
-CORS(app, origins=cors_origins)
+CORS(app, origins=cors_origins, allow_headers=["Authorization", "Content-Type"], supports_credentials=True)
 db.init_app(app)
 blockchain = BlockchainClient()
 
@@ -41,6 +41,16 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 with app.app_context():
     db.create_all()
+
+
+@app.after_request
+def add_cache_headers(response):
+    """Prevent browsers/CDNs from caching API responses (avoids 304s)."""
+    if request.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
 
 # Initialize Firebase
 init_firebase()

@@ -15,15 +15,34 @@ import {
   Activity,
   Cpu,
   ShieldCheck,
-  ChevronDown
+  ChevronDown,
+  Search,
+  User,
+  Hash,
+  XCircle,
 } from "lucide-react";
 import GlassCard from "@/components/GlassCard";
-import { getRecords, ContentRecord } from "@/lib/api";
+import { getRecords, verifyOnChain, ContentRecord } from "@/lib/api";
 
 export default function RegistryPage() {
   const [records, setRecords] = useState<ContentRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<ContentRecord | null>(null);
+  const [verifyingId, setVerifyingId] = useState<number | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [verifyResults, setVerifyResults] = useState<Record<number, any>>({});
+
+  const handleVerify = async (record: ContentRecord) => {
+    setVerifyingId(record.id);
+    try {
+      const data = await verifyOnChain(record.fingerprint);
+      setVerifyResults((prev) => ({ ...prev, [record.id]: data }));
+    } catch {
+      setVerifyResults((prev) => ({ ...prev, [record.id]: { error: true } }));
+    } finally {
+      setVerifyingId(null);
+    }
+  };
 
   const fetchRecords = useCallback(async () => {
     setLoading(true);
@@ -257,6 +276,112 @@ export default function RegistryPage() {
                                 )}
                               </div>
                             </div>
+
+                            {/* Verify on Blockchain Button */}
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleVerify(record); }}
+                              disabled={verifyingId === record.id}
+                              className="w-full flex items-center justify-center gap-2 py-3 rounded-sm border border-primary/30 bg-primary/5 hover:bg-primary/10 text-primary font-black text-[11px] tracking-widest uppercase transition-all disabled:opacity-50"
+                            >
+                              {verifyingId === record.id ? (
+                                <>
+                                  <Loader2 size={12} className="animate-spin" />
+                                  Verifying...
+                                </>
+                              ) : (
+                                <>
+                                  <Search size={12} />
+                                  Verify on Blockchain
+                                </>
+                              )}
+                            </button>
+
+                            {/* Verification Result */}
+                            <AnimatePresence>
+                              {verifyResults[record.id] && !verifyResults[record.id].error && (
+                                <motion.div
+                                  initial={{ opacity: 0, height: 0 }}
+                                  animate={{ opacity: 1, height: "auto" }}
+                                  exit={{ opacity: 0, height: 0 }}
+                                  className="overflow-hidden"
+                                >
+                                  <div className={`p-4 rounded-sm border space-y-3 ${
+                                    verifyResults[record.id].on_chain
+                                      ? "border-green-500/30 bg-green-500/5"
+                                      : "border-amber-500/30 bg-amber-500/5"
+                                  }`}>
+                                    <div className="flex items-center gap-2">
+                                      {verifyResults[record.id].on_chain ? (
+                                        <ShieldCheck size={14} className="text-green-400" />
+                                      ) : (
+                                        <XCircle size={14} className="text-amber-400" />
+                                      )}
+                                      <span className={`text-[12px] font-black tracking-wider uppercase ${
+                                        verifyResults[record.id].on_chain ? "text-green-400" : "text-amber-400"
+                                      }`}>
+                                        {verifyResults[record.id].on_chain ? "Verified On-Chain" : "Not Found On-Chain"}
+                                      </span>
+                                    </div>
+
+                                    {verifyResults[record.id].on_chain && verifyResults[record.id].blockchain_record && (
+                                      <div className="space-y-2 text-[11px] font-mono">
+                                        <div className="flex items-start gap-2">
+                                          <User size={10} className="text-zinc-500 mt-0.5 shrink-0" />
+                                          <div className="min-w-0">
+                                            <p className="text-zinc-500 text-[10px] uppercase tracking-wider">Owner</p>
+                                            <p className="text-zinc-300 break-all">{verifyResults[record.id].blockchain_record.owner}</p>
+                                          </div>
+                                        </div>
+                                        <div className="flex items-start gap-2">
+                                          <Hash size={10} className="text-zinc-500 mt-0.5 shrink-0" />
+                                          <div>
+                                            <p className="text-zinc-500 text-[10px] uppercase tracking-wider">Content Type</p>
+                                            <p className="text-zinc-300">{verifyResults[record.id].blockchain_record.content_type}</p>
+                                          </div>
+                                        </div>
+                                        <div className="flex items-start gap-2">
+                                          <FileText size={10} className="text-zinc-500 mt-0.5 shrink-0" />
+                                          <div>
+                                            <p className="text-zinc-500 text-[10px] uppercase tracking-wider">Title</p>
+                                            <p className="text-zinc-300">{verifyResults[record.id].blockchain_record.title}</p>
+                                          </div>
+                                        </div>
+                                        <div className="flex items-start gap-2">
+                                          <Clock size={10} className="text-zinc-500 mt-0.5 shrink-0" />
+                                          <div>
+                                            <p className="text-zinc-500 text-[10px] uppercase tracking-wider">Timestamp</p>
+                                            <p className="text-zinc-300">
+                                              {new Date(verifyResults[record.id].blockchain_record.timestamp * 1000).toLocaleString()}
+                                            </p>
+                                          </div>
+                                        </div>
+
+                                        {record.tx_hash && (
+                                          <a
+                                            href={`https://sepolia.etherscan.io/tx/${record.tx_hash}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            onClick={(e) => e.stopPropagation()}
+                                            className="flex items-center justify-center gap-2 mt-2 py-2.5 rounded-sm bg-zinc-950 border border-white/10 hover:border-green-500/40 transition-all group"
+                                          >
+                                            <ExternalLink size={12} className="text-zinc-500 group-hover:text-green-400" />
+                                            <span className="text-[10px] font-black tracking-widest uppercase text-zinc-400 group-hover:text-white">
+                                              View on Etherscan
+                                            </span>
+                                          </a>
+                                        )}
+                                      </div>
+                                    )}
+
+                                    {!verifyResults[record.id].on_chain && (
+                                      <p className="text-[11px] text-amber-400/70">
+                                        Content saved locally but not found on the blockchain.
+                                      </p>
+                                    )}
+                                  </div>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
                           </div>
                         </div>
                       </div>

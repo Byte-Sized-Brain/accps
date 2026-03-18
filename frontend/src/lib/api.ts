@@ -1,9 +1,25 @@
+import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
+/**
+ * Wait for Firebase to finish restoring the session before reading currentUser.
+ * Without this, currentUser is null right after a page refresh until
+ * onAuthStateChanged fires — causing requests to go out without a token (401).
+ */
+function waitForUser(): Promise<import("firebase/auth").User | null> {
+  return new Promise((resolve) => {
+    if (auth.currentUser) return resolve(auth.currentUser);
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      unsubscribe();
+      resolve(user);
+    });
+  });
+}
+
 async function getAuthHeaders(): Promise<HeadersInit> {
-  const user = auth.currentUser;
+  const user = await waitForUser();
   if (!user) return {};
   const token = await user.getIdToken();
   return { Authorization: `Bearer ${token}` };
@@ -106,24 +122,24 @@ export async function checkPlagiarism(formData: FormData): Promise<PlagiarismRes
 
 export async function getRecords(): Promise<ContentRecord[]> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE}/api/records`, { headers });
+  const res = await fetch(`${API_BASE}/api/records`, { headers, cache: "no-store" });
   const data = await res.json();
   return data.records || [];
 }
 
 export async function getMyRecords(): Promise<ContentRecord[]> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE}/api/my-records`, { headers });
+  const res = await fetch(`${API_BASE}/api/my-records`, { headers, cache: "no-store" });
   const data = await res.json();
   return data.records || [];
 }
 
 export async function getStatus(): Promise<StatusResponse> {
-  const res = await fetch(`${API_BASE}/api/status`);
+  const res = await fetch(`${API_BASE}/api/status`, { cache: "no-store" });
   return await res.json();
 }
 
 export async function verifyOnChain(fingerprint: string) {
-  const res = await fetch(`${API_BASE}/api/verify/${fingerprint}`);
+  const res = await fetch(`${API_BASE}/api/verify/${fingerprint}`, { cache: "no-store" });
   return await res.json();
 }
