@@ -32,7 +32,8 @@ app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URI
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
 
-CORS(app, origins=["http://localhost:3000", "http://127.0.0.1:3000"])
+cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
+CORS(app, origins=cors_origins)
 db.init_app(app)
 blockchain = BlockchainClient()
 
