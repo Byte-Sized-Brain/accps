@@ -12,3 +12,4 @@ beautifulsoup4>=4.12
 requests>=2.31
 pinatapy-vourhey>=0.2
 gunicorn>=21.2
+psycopg2-binary>=2.9
