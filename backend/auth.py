@@ -22,8 +22,16 @@ def init_firebase():
     if _firebase_initialized:
         return
 
+    # Support JSON string directly (for platforms like Render where you can't upload files)
+    cred_json = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
     cred_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_KEY")
-    if cred_path and os.path.exists(cred_path):
+
+    if cred_json:
+        cred = credentials.Certificate(json.loads(cred_json))
+        firebase_admin.initialize_app(cred)
+        _has_full_credentials = True
+        print("[AUTH] Firebase initialized with service account JSON from env var.")
+    elif cred_path and os.path.exists(cred_path):
         cred = credentials.Certificate(cred_path)
         firebase_admin.initialize_app(cred)
         _has_full_credentials = True
